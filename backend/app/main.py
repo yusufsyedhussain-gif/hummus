@@ -28,8 +28,14 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     # Create tables on startup (use Alembic migrations in production)
-    await init_db()
-    logger.info("Database tables initialized")
+    try:
+        await init_db()
+        logger.info("Database tables initialized")
+    except Exception as e:
+        logger.error(f"CRITICAL ERROR starting database: {e}")
+        logger.error(f"Current DATABASE_URL: {settings.DATABASE_URL}")
+        logger.error("Please ensure your DATABASE_URL environment variable is set correctly in Render.")
+        raise
     yield
     logger.info("Shutting down")
 
