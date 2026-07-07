@@ -4,17 +4,32 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 from app.config import get_settings
 
+from sqlalchemy.pool import NullPool
+
 settings = get_settings()
+
+is_pgbouncer = "pooler.supabase.com" in settings.DATABASE_URL or ":6543" in settings.DATABASE_URL
+
+engine_kwargs = {
+    "echo": settings.DEBUG,
+}
+
+if is_pgbouncer:
+    # Disable SQLAlchemy connection pool since PgBouncer is already pooling
+    engine_kwargs["poolclass"] = NullPool
+    # Disable SQLAlchemy prepared statements and asyncpg's internal statement cache
+    engine_kwargs["connect_args"] = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: None,
+    }
+else:
+    engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    echo=settings.DEBUG,
-    connect_args={
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-    },
+    **engine_kwargs
 )
 
 async_session_factory = async_sessionmaker(
