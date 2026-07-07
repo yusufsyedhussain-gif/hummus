@@ -17,9 +17,14 @@ COPY --from=builder /install /usr/local
 # Copy application code
 COPY . .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Create upload directory
 RUN mkdir -p /tmp/product-hub/uploads
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Default: run both FastAPI + Celery via start.sh (used on Render).
+# The docker-compose.yml overrides this command per-service for local dev.
+CMD ["sh", "start.sh"]

@@ -1,0 +1,29 @@
+services:
+  # ── Backend (FastAPI + Celery in one container) ────────────────────
+  - type: web
+    name: product-hub-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DEBUG
+        value: "false"
+      - key: UPLOAD_DIR
+        value: /tmp/product-hub/uploads
+      - key: CSV_BATCH_SIZE
+        value: "5000"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "100"
+      - key: WEBHOOK_TIMEOUT_SECONDS
+        value: "10"
+      # Set these manually in the Render dashboard after creating the service:
+      # DATABASE_URL       - from Supabase (asyncpg format)
+      # DATABASE_SYNC_URL  - from Supabase (psycopg2 format)
+      # REDIS_URL          - from Upstash
+      # CELERY_BROKER_URL  - same as REDIS_URL
+      # CELERY_RESULT_BACKEND - same as REDIS_URL
+      # CORS_ORIGINS       - ["https://your-frontend.vercel.app"]
