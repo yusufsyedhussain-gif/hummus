@@ -1,100 +1,101 @@
-# 📦 Product Hub
+# Product Hub
 
-High-performance web application for bulk CSV product import (up to 500,000 entries), product CRUD management, and webhook configuration.
+A web application for importing product catalogs via CSV and managing them through a simple interface. Built to handle large files — up to 500,000 rows — with background processing so the browser stays responsive during the import.
 
-## Tech Stack
+## What it does
+
+**CSV Import**
+
+Drop a CSV file onto the import page and the application handles the rest. The file gets uploaded to the backend, validated, and processed in the background by a Celery worker. The dashboard shows a live progress bar that updates every second, breaking down how many rows were inserted, updated, or errored. When the import finishes you get a summary, and if something goes wrong you can see the failure reason and retry without re-uploading.
+
+**Product Management**
+
+Browse your product catalog with search, status filtering, and pagination. Each product shows its SKU, name, description, and active status. You can toggle a product active or inactive directly from the table. To edit fields or delete a product, use the Edit and Delete buttons on the row.
+
+**Webhooks**
+
+Configure webhook endpoints that get notified when products are created, updated, or deleted. You can test a webhook manually, enable or disable it, and view its delivery log.
+
+## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI (Python 3.12) |
-| Task Queue | Celery 5 + Redis |
+| Task queue | Celery 5 + Redis 7 |
 | Database | PostgreSQL 16 |
 | ORM | SQLAlchemy 2.0 (async) |
-| Frontend | Next.js 14 (TypeScript) |
-| Containerization | Docker + Docker Compose |
+| Frontend | Next.js 16 (TypeScript) |
+| Containers | Docker + Docker Compose |
 
-## Features
+## Running it
 
-- **CSV Import**: Drag-and-drop upload with real-time SSE progress tracking
-- **Product Management**: Full CRUD with search, filtering, pagination, and inline editing
-- **Webhook System**: Configure webhooks, test delivery, view logs
-- **Bulk Operations**: Import 500K products, clear all with confirmation
-- **Async Processing**: Celery workers for background CSV processing and webhook delivery
-
-## Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+ (for local frontend development)
-- Python 3.11+ (for local backend development)
-
-### Using Docker Compose (Recommended)
+The easiest way is Docker Compose. It starts all five services — PostgreSQL, Redis, the FastAPI backend, a Celery worker, and the Next.js frontend — with one command.
 
 ```bash
-# Clone the repository
 git clone <repo-url>
 cd product-hub
 
-# Start all services
-docker compose up --build
-
-# Access the application
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
+docker compose up --build -d
 ```
 
-### Local Development
+Once everything is healthy:
 
-#### Backend
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API docs: http://localhost:8000/docs
+
+To stop:
+
+```bash
+docker compose down
+```
+
+## Local development
+
+If you want to run the backend or frontend outside Docker, you need PostgreSQL and Redis running first. The quickest way is to start just those two services from Docker Compose:
+
+```bash
+docker compose up postgres redis -d
+```
+
+**Backend**
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # or .\venv\Scripts\activate on Windows
-
-# Install dependencies
+source venv/bin/activate  # Windows: .\\venv\\Scripts\\activate
 pip install -r requirements.txt
 
-# Start PostgreSQL and Redis (via Docker)
-docker compose up postgres redis -d
-
-# Run the API server
 uvicorn app.main:app --reload --port 8000
 
-# In another terminal, start Celery worker
+# In a separate terminal
 celery -A app.celery_app:celery_app worker --loglevel=info --queues=csv,webhooks,celery
 ```
 
-#### Frontend
+**Frontend**
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start dev server
 npm run dev
 ```
 
-## CSV File Format
+The dev server runs on http://localhost:3000 by default. If that port is occupied it falls back to 3001.
 
-The CSV file should have the following columns:
+## CSV format
 
-| Column | Required | Description |
+The importer expects a CSV with the following columns:
+
+| Column | Required | Notes |
 |---|---|---|
-| `sku` | ✅ | Unique product identifier (max 100 chars) |
-| `name` | ✅ | Product name (max 500 chars) |
-| `price` | ✅ | Product price (numeric, >= 0) |
-| `description` | ❌ | Product description |
-| `quantity` | ❌ | Stock quantity (integer, >= 0, default: 0) |
-| `status` | ❌ | "active" or "inactive" (default: "active") |
+| `sku` | Yes | Unique identifier, max 100 characters |
+| `name` | Yes | Product name, max 500 characters |
+| `price` | Yes | Numeric, must be 0 or greater |
+| `description` | No | Free text |
+| `quantity` | No | Integer, defaults to 0 |
+| `status` | No | `active` or `inactive`, defaults to `active` |
 
-### Example
+Example:
 
 ```csv
 sku,name,price,description,quantity,status
@@ -103,23 +104,39 @@ PROD-002,USB Keyboard,49.99,Mechanical keyboard,75,active
 PROD-003,Monitor Stand,34.99,Adjustable monitor stand,200,inactive
 ```
 
-## API Documentation
-
-Once the backend is running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+Duplicate SKUs are treated as updates rather than errors — the existing product gets overwritten with the new data.
 
 ## Architecture
 
 ```
-Browser (Next.js) → FastAPI REST API → PostgreSQL
-                        ↓
-                    Redis (Broker)
-                        ↓
-                  Celery Workers → PostgreSQL
-                        ↓
-                  Redis (Pub/Sub) → SSE → Browser
+Browser (Next.js)
+    |
+    | HTTP (REST + file upload)
+    v
+FastAPI backend ──── PostgreSQL (products, import tasks)
+    |
+    | task dispatch
+    v
+Redis (Celery broker)
+    |
+    v
+Celery worker ──── PostgreSQL (writes import results)
 ```
+
+Progress polling: the browser hits `GET /api/v1/tasks/{id}` every second while an import is running. There is no persistent WebSocket connection — plain HTTP polling keeps things simple and avoids issues with proxy buffering.
+
+## Environment variables
+
+The defaults in `docker-compose.yml` work out of the box for local use. If you are deploying elsewhere, the key variables are:
+
+| Variable | Where | Description |
+|---|---|---|
+| `DATABASE_URL` | backend | Async PostgreSQL connection string |
+| `DATABASE_SYNC_URL` | backend | Sync connection string (used by Alembic) |
+| `REDIS_URL` | backend | Redis connection string |
+| `CELERY_BROKER_URL` | backend | Celery broker (same Redis) |
+| `CORS_ORIGINS` | backend | JSON array of allowed frontend origins |
+| `NEXT_PUBLIC_API_URL` | frontend | Backend base URL as seen by the browser |
 
 ## License
 
