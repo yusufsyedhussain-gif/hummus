@@ -421,70 +421,30 @@ export default function ProductsPage() {
                 <tbody>
                   {products.map((product) => (
                     <tr key={product.id} className="animate-in">
-                      {/* SKU - inline editable */}
+                      {/* SKU - read only */}
                       <td>
-                        {inlineEdit?.id === product.id && inlineEdit.field === 'sku' ? (
-                          <div className="inline-edit">
-                            <input
-                              className="input"
-                              value={inlineEdit.value}
-                              onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleInlineEditSave();
-                                if (e.key === 'Escape') setInlineEdit(null);
-                              }}
-                              autoFocus
-                            />
-                            <div className="inline-edit-actions">
-                              <button className="inline-edit-btn save" onClick={handleInlineEditSave}>✓</button>
-                              <button className="inline-edit-btn cancel" onClick={() => setInlineEdit(null)}>✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span
-                            className="editable-cell"
-                            onClick={() => setInlineEdit({ id: product.id, field: 'sku', value: product.sku })}
-                            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}
-                          >
-                            {product.sku}
-                          </span>
-                        )}
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                          {product.sku}
+                        </span>
                       </td>
 
-                      {/* Name - inline editable */}
+                      {/* Name - read only */}
                       <td>
-                        {inlineEdit?.id === product.id && inlineEdit.field === 'name' ? (
-                          <div className="inline-edit">
-                            <input
-                              className="input"
-                              value={inlineEdit.value}
-                              onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleInlineEditSave();
-                                if (e.key === 'Escape') setInlineEdit(null);
-                              }}
-                              autoFocus
-                            />
-                            <div className="inline-edit-actions">
-                              <button className="inline-edit-btn save" onClick={handleInlineEditSave}>✓</button>
-                              <button className="inline-edit-btn cancel" onClick={() => setInlineEdit(null)}>✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span
-                            className="editable-cell"
-                            onClick={() => setInlineEdit({ id: product.id, field: 'name', value: product.name })}
-                            title={product.description}
-                          >
-                            {product.name}
-                          </span>
-                        )}
+                        <span>
+                          {product.name}
+                        </span>
                       </td>
 
-                      {/* Description */}
+                      {/* Description - strip any embedded name/sku prefix from backend data */}
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '260px' }}>
                         <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {product.description || <em style={{ color: 'var(--text-muted)' }}>—</em>}
+                          {(() => {
+                            const raw = product.description || '';
+                            // Strip patterns like "name: X | sku: Y | description: Z"
+                            const match = raw.match(/description:\s*(.+)$/i);
+                            const clean = match ? match[1].trim() : raw;
+                            return clean || <em style={{ color: 'var(--text-muted)' }}>—</em>;
+                          })()}
                         </span>
                       </td>
 
