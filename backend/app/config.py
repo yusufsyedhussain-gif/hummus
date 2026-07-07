@@ -36,7 +36,7 @@ class Settings(BaseSettings):
             if "pooler.supabase.com" in v or ":6543" in v:
                 separator = "&" if "?" in v else "?"
                 if "prepared_statement_cache_size" not in v:
-                    v += f"{separator}prepared_statement_cache_size=0&statement_cache_size=0"
+                    v += f"{separator}prepared_statement_cache_size=0"
         return v
 
     @field_validator("DATABASE_SYNC_URL", mode="before")
