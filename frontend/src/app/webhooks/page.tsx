@@ -279,18 +279,17 @@ export default function WebhooksPage() {
       {/* Sidebar */}
       <aside className="sidebar" id="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">📦</div>
           <h1>Product Hub</h1>
         </div>
         <nav className="sidebar-nav">
           <button className={`nav-link ${pathname === '/' ? 'active' : ''}`} onClick={() => router.push('/')} id="nav-dashboard">
-            <span className="nav-icon">📤</span>CSV Import
+            CSV Import
           </button>
           <button className={`nav-link ${pathname === '/products' ? 'active' : ''}`} onClick={() => router.push('/products')} id="nav-products">
-            <span className="nav-icon">🏷️</span>Products
+            Products
           </button>
           <button className={`nav-link ${pathname === '/webhooks' ? 'active' : ''}`} onClick={() => router.push('/webhooks')} id="nav-webhooks">
-            <span className="nav-icon">🔗</span>Webhooks
+            Webhooks
           </button>
         </nav>
       </aside>
@@ -302,7 +301,7 @@ export default function WebhooksPage() {
             <p>Configure endpoints to receive event notifications</p>
           </div>
           <button className="btn btn-primary" onClick={openCreateModal} id="add-webhook-btn">
-            + Add Webhook
+            Add Webhook
           </button>
         </div>
 
@@ -312,10 +311,9 @@ export default function WebhooksPage() {
           </div>
         ) : webhooks.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🔗</div>
             <h3>No webhooks configured</h3>
             <p>Add a webhook to receive notifications when products are created, updated, or deleted</p>
-            <button className="btn btn-primary" onClick={openCreateModal}>+ Add Webhook</button>
+            <button className="btn btn-primary" onClick={openCreateModal}>Add Webhook</button>
           </div>
         ) : (
           <div id="webhooks-list">
@@ -325,7 +323,7 @@ export default function WebhooksPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-sm)' }}>
                       <span className={`badge ${webhook.is_enabled ? 'badge-active' : 'badge-inactive'}`}>
-                        {webhook.is_enabled ? '● Enabled' : '○ Disabled'}
+                        {webhook.is_enabled ? 'Enabled' : 'Disabled'}
                       </span>
                       <label className="toggle" style={{ transform: 'scale(0.8)' }}>
                         <input
@@ -356,27 +354,27 @@ export default function WebhooksPage() {
                     >
                       {testingId === webhook.id ? (
                         <span className="spinner" style={{ width: 12, height: 12 }} />
-                      ) : '⚡'} Test
+                      ) : null} Test
                     </button>
                     <button
                       className="btn btn-sm btn-ghost"
                       onClick={() => loadLogs(webhook.id)}
                     >
-                      📋 Logs
+                      Logs
                     </button>
                     <button
-                      className="action-btn"
-                      title="Edit"
+                      className="action-btn-text"
                       onClick={() => openEditModal(webhook)}
+                      style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '0 4px', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      ✏️
+                      Edit
                     </button>
                     <button
-                      className="action-btn danger"
-                      title="Delete"
+                      className="action-btn-text danger"
                       onClick={() => setDeleteTarget(webhook)}
+                      style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '0 4px', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      🗑️
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -397,7 +395,7 @@ export default function WebhooksPage() {
                       gap: 'var(--space-md)',
                     }}
                   >
-                    <span>{testResults[webhook.id].success ? '✅' : '❌'}</span>
+                    <span>{testResults[webhook.id].success ? 'Success' : 'Failed'}</span>
                     <span>
                       {testResults[webhook.id].status_code
                         ? `HTTP ${testResults[webhook.id].status_code}`

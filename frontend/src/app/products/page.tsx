@@ -319,18 +319,17 @@ export default function ProductsPage() {
       {/* Sidebar */}
       <aside className="sidebar" id="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">📦</div>
           <h1>Product Hub</h1>
         </div>
         <nav className="sidebar-nav">
           <button className={`nav-link ${pathname === '/' ? 'active' : ''}`} onClick={() => router.push('/')} id="nav-dashboard">
-            <span className="nav-icon">📤</span>CSV Import
+            CSV Import
           </button>
           <button className={`nav-link ${pathname === '/products' ? 'active' : ''}`} onClick={() => router.push('/products')} id="nav-products">
-            <span className="nav-icon">🏷️</span>Products
+            Products
           </button>
           <button className={`nav-link ${pathname === '/webhooks' ? 'active' : ''}`} onClick={() => router.push('/webhooks')} id="nav-webhooks">
-            <span className="nav-icon">🔗</span>Webhooks
+            Webhooks
           </button>
         </nav>
       </aside>
@@ -344,10 +343,10 @@ export default function ProductsPage() {
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
             <button className="btn btn-danger btn-sm" onClick={() => setShowClearAll(true)} id="clear-all-btn">
-              🗑️ Clear All
+              Clear All
             </button>
             <button className="btn btn-primary" onClick={openCreateModal} id="add-product-btn">
-              + Add Product
+              Add Product
             </button>
           </div>
         </div>
@@ -355,9 +354,9 @@ export default function ProductsPage() {
         {/* Filter Bar */}
         <div className="filter-bar" id="filter-bar">
           <div className="search-input-wrapper">
-            <span className="search-icon">🔍</span>
             <input
               className="input"
+              style={{ paddingLeft: '12px' }}
               placeholder="Search by SKU, name, or description..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -402,10 +401,9 @@ export default function ProductsPage() {
           </div>
         ) : products.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🏷️</div>
             <h3>No products found</h3>
             <p>{search || statusFilter ? 'Try adjusting your filters' : 'Upload a CSV or add products manually'}</p>
-            <button className="btn btn-primary" onClick={openCreateModal}>+ Add Product</button>
+            <button className="btn btn-primary" onClick={openCreateModal}>Add Product</button>
           </div>
         ) : (
           <>
@@ -415,10 +413,8 @@ export default function ProductsPage() {
                   <tr>
                     <th>SKU</th>
                     <th>Name</th>
-                    <th>Price</th>
-                    <th>Qty</th>
+                    <th>Description</th>
                     <th>Status</th>
-                    <th>Updated</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -485,66 +481,11 @@ export default function ProductsPage() {
                         )}
                       </td>
 
-                      {/* Price - inline editable */}
-                      <td>
-                        {inlineEdit?.id === product.id && inlineEdit.field === 'price' ? (
-                          <div className="inline-edit">
-                            <input
-                              className="input"
-                              type="number"
-                              step="0.01"
-                              value={inlineEdit.value}
-                              onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleInlineEditSave();
-                                if (e.key === 'Escape') setInlineEdit(null);
-                              }}
-                              autoFocus
-                            />
-                            <div className="inline-edit-actions">
-                              <button className="inline-edit-btn save" onClick={handleInlineEditSave}>✓</button>
-                              <button className="inline-edit-btn cancel" onClick={() => setInlineEdit(null)}>✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span
-                            className="editable-cell"
-                            onClick={() => setInlineEdit({ id: product.id, field: 'price', value: String(product.price) })}
-                          >
-                            ${Number(product.price).toFixed(2)}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Quantity */}
-                      <td>
-                        {inlineEdit?.id === product.id && inlineEdit.field === 'quantity' ? (
-                          <div className="inline-edit">
-                            <input
-                              className="input"
-                              type="number"
-                              min="0"
-                              value={inlineEdit.value}
-                              onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleInlineEditSave();
-                                if (e.key === 'Escape') setInlineEdit(null);
-                              }}
-                              autoFocus
-                            />
-                            <div className="inline-edit-actions">
-                              <button className="inline-edit-btn save" onClick={handleInlineEditSave}>✓</button>
-                              <button className="inline-edit-btn cancel" onClick={() => setInlineEdit(null)}>✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span
-                            className="editable-cell"
-                            onClick={() => setInlineEdit({ id: product.id, field: 'quantity', value: String(product.quantity) })}
-                          >
-                            {product.quantity}
-                          </span>
-                        )}
+                      {/* Description */}
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '260px' }}>
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {product.description || <em style={{ color: 'var(--text-muted)' }}>—</em>}
+                        </span>
                       </td>
 
                       {/* Status Toggle */}
@@ -559,27 +500,22 @@ export default function ProductsPage() {
                         </label>
                       </td>
 
-                      {/* Updated */}
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        {new Date(product.updated_at).toLocaleDateString()}
-                      </td>
-
                       {/* Actions */}
                       <td>
                         <div className="action-cell">
                           <button
-                            className="action-btn"
-                            title="Edit"
+                            className="action-btn-text"
                             onClick={() => openEditModal(product)}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '0 4px', fontSize: '0.85rem', fontWeight: 600 }}
                           >
-                            ✏️
+                            Edit
                           </button>
                           <button
-                            className="action-btn danger"
-                            title="Delete"
+                            className="action-btn-text danger"
                             onClick={() => setDeleteTarget(product)}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '0 4px', fontSize: '0.85rem', fontWeight: 600 }}
                           >
-                            🗑️
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -679,7 +615,7 @@ export default function ProductsPage() {
       {/* Clear All Confirmation */}
       <ConfirmDialog
         isOpen={showClearAll}
-        title="⚠️ Clear All Products"
+        title="Clear All Products"
         message={`This will permanently delete ALL ${pagination?.total_items?.toLocaleString() || 0} products from the database. This action is irreversible!`}
         confirmText="Delete All Products"
         cancelText="Keep Products"

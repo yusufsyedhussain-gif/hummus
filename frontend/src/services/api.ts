@@ -149,25 +149,49 @@ export interface ImportTask {
 }
 
 export const csvApi = {
-  async upload(file: File): Promise<{ task_id: string; status: string; message: string }> {
-    const formData = new FormData();
-    formData.append('file', file);
+  upload(
+    file: File,
+    onUploadProgress?: (percentage: number) => void
+  ): Promise<{ task_id: string; status: string; message: string }> {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const response = await fetch(`${API_BASE}/csv/upload`, {
-      method: 'POST',
-      body: formData,
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/csv/upload`);
+
+      if (onUploadProgress) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentage = (event.loaded / event.total) * 100;
+            onUploadProgress(percentage);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error('Invalid response JSON'));
+          }
+        } else {
+          let detail = 'Upload failed';
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            detail = errorData.detail || detail;
+          } catch { /* ignore */ }
+          reject(new ApiError(xhr.status, detail));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network error during upload'));
+      };
+
+      xhr.send(formData);
     });
-
-    if (!response.ok) {
-      let detail = 'Upload failed';
-      try {
-        const errorData = await response.json();
-        detail = errorData.detail || detail;
-      } catch { /* ignore */ }
-      throw new ApiError(response.status, detail);
-    }
-
-    return response.json();
   },
 
   getTask(taskId: string): Promise<ImportTask> {

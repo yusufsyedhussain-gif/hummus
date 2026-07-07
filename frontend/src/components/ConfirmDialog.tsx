@@ -16,12 +16,6 @@ interface ConfirmDialogProps {
   loading?: boolean;
 }
 
-const ICONS: Record<string, string> = {
-  danger: '⚠️',
-  warning: '⚡',
-  default: '❓',
-};
-
 export default function ConfirmDialog({
   isOpen,
   title,
@@ -38,7 +32,6 @@ export default function ConfirmDialog({
   return (
     <div className="modal-overlay confirm-dialog" onClick={onCancel} id="confirm-dialog">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className={`confirm-icon ${variant}`}>{ICONS[variant]}</div>
         <h3 style={{ marginBottom: '12px', fontSize: '1.1rem' }}>{title}</h3>
         <p>{message}</p>
         <div className="modal-footer">

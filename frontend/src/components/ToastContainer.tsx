@@ -11,13 +11,6 @@ interface ToastContainerProps {
   onDismiss: (id: string) => void;
 }
 
-const ICONS: Record<string, string> = {
-  success: '✓',
-  error: '✕',
-  warning: '⚠',
-  info: 'ℹ',
-};
-
 export default function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   if (toasts.length === 0) return null;
 
@@ -25,7 +18,6 @@ export default function ToastContainer({ toasts, onDismiss }: ToastContainerProp
     <div className="toast-container" id="toast-container">
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.type}`} id={`toast-${toast.id}`}>
-          <span style={{ fontSize: '1.1rem' }}>{ICONS[toast.type]}</span>
           <span className="toast-message">{toast.message}</span>
           <button
             className="toast-dismiss"

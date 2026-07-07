@@ -19,6 +19,7 @@ export default function DashboardPage() {
   // Upload state
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [sseUrl, setSseUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,12 +44,30 @@ export default function DashboardPage() {
     try {
       const data = await csvApi.listTasks();
       setTasks(data);
+
+      // Auto-reconnect only to tasks started within the last 10 minutes
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+      const activeTask = data.find(t =>
+        ['queued', 'parsing', 'validating', 'importing'].includes(t.status) &&
+        t.started_at &&
+        new Date(t.started_at).getTime() > tenMinutesAgo
+      );
+      if (activeTask && !currentTaskId) {
+        setCurrentTaskId(activeTask.id);
+        setSseUrl(csvApi.getProgressUrl(activeTask.id));
+      }
     } catch {
       // ignore
     } finally {
       setLoadingTasks(false);
     }
-  }, []);
+  }, [currentTaskId]);
+
+  const handleClearProgress = () => {
+    setCurrentTaskId(null);
+    setSseUrl(null);
+    resetSSE();
+  };
 
   useEffect(() => {
     loadTasks();
@@ -62,18 +81,23 @@ export default function DashboardPage() {
     }
 
     setUploading(true);
+    setUploadProgress(0);
     resetSSE();
 
     try {
-      const result = await csvApi.upload(file);
+      const result = await csvApi.upload(file, (pct) => {
+        setUploadProgress(Math.round(pct));
+      });
       setCurrentTaskId(result.task_id);
       setSseUrl(csvApi.getProgressUrl(result.task_id));
       info('CSV file accepted — processing started');
+      loadTasks();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload failed';
       showError(message);
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }, [showError, info, resetSSE]);
 
@@ -118,12 +142,29 @@ export default function DashboardPage() {
 
   const isProcessing = progress && !['completed', 'failed'].includes(progress.status);
 
+  const getDisplayTasks = () => {
+    if (!progress) return tasks;
+    return tasks.map((task) => {
+      if (task.id === progress.task_id) {
+        return {
+          ...task,
+          status: progress.status,
+          processed_rows: progress.processed_rows,
+          total_rows: progress.total_rows || task.total_rows,
+          inserted_count: progress.inserted_count,
+          updated_count: progress.updated_count,
+          error_count: progress.error_count,
+        };
+      }
+      return task;
+    });
+  };
+
   return (
     <div className="app-layout">
       {/* Sidebar */}
       <aside className="sidebar" id="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">📦</div>
           <h1>Product Hub</h1>
         </div>
         <nav className="sidebar-nav">
@@ -132,7 +173,6 @@ export default function DashboardPage() {
             onClick={() => router.push('/')}
             id="nav-dashboard"
           >
-            <span className="nav-icon">📤</span>
             CSV Import
           </button>
           <button
@@ -140,7 +180,6 @@ export default function DashboardPage() {
             onClick={() => router.push('/products')}
             id="nav-products"
           >
-            <span className="nav-icon">🏷️</span>
             Products
           </button>
           <button
@@ -148,7 +187,6 @@ export default function DashboardPage() {
             onClick={() => router.push('/webhooks')}
             id="nav-webhooks"
           >
-            <span className="nav-icon">🔗</span>
             Webhooks
           </button>
         </nav>
@@ -165,93 +203,163 @@ export default function DashboardPage() {
         </div>
 
         {/* Upload Zone */}
-        <div
-          className={`upload-zone ${isDragOver ? 'dragover' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          id="upload-zone"
-          style={{ position: 'relative', zIndex: 1 }}
-        >
-          <div className="upload-zone-icon">{uploading ? '⏳' : '📄'}</div>
-          <h3>{uploading ? 'Uploading...' : 'Drop your CSV file here'}</h3>
-          <p>or click to browse • Supports up to 100MB • .csv files only</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-            id="file-input"
-          />
-        </div>
+        {!uploading && !currentTaskId && (
+          <div
+            className={`upload-zone ${isDragOver ? 'dragover' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            id="upload-zone"
+            style={{ position: 'relative', zIndex: 1 }}
+          >
+            <h3>Drop your CSV file here</h3>
+            <p>or click to browse • Supports up to 100MB • .csv files only</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+              id="file-input"
+            />
+          </div>
+        )}
 
-        {/* Import Progress */}
-        {progress && (
+        {/* Unified Upload & Import Progress Card */}
+        {(uploading || currentTaskId) && (
           <div className="import-progress-card animate-in" style={{ marginTop: 'var(--space-xl)' }} id="import-progress">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-lg)' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Import Progress</h3>
-              <span className={`import-status-badge ${progress.status}`}>
-                {isConnected && isProcessing && (
-                  <span className="spinner" style={{ width: 12, height: 12 }} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                {uploading ? 'Uploading File' : 'Import Progress'}
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <span className={`import-status-badge ${uploading ? 'importing' : (progress?.status || 'queued')}`}>
+                  {uploading && 'Uploading'}
+                  {!uploading && !progress && 'Connecting...'}
+                  {!uploading && progress && (
+                    <>
+                      {progress.status === 'queued' && 'Queued'}
+                      {progress.status === 'parsing' && 'Parsing CSV'}
+                      {progress.status === 'validating' && 'Validating'}
+                      {progress.status === 'importing' && 'Importing'}
+                      {progress.status === 'completed' && 'Complete'}
+                      {progress.status === 'failed' && 'Failed'}
+                    </>
+                  )}
+                </span>
+                {!uploading && (
+                  <button
+                    onClick={handleClearProgress}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.2rem', lineHeight: 1, padding: '2px 6px' }}
+                    title="Dismiss"
+                    id="dismiss-progress-btn"
+                  >×</button>
                 )}
-                {progress.status === 'queued' && 'Queued'}
-                {progress.status === 'parsing' && 'Parsing CSV'}
-                {progress.status === 'validating' && 'Validating'}
-                {progress.status === 'importing' && 'Importing'}
-                {progress.status === 'completed' && '✓ Complete'}
-                {progress.status === 'failed' && '✕ Failed'}
-              </span>
+              </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="progress-container" style={{ height: 12, marginBottom: 'var(--space-lg)' }}>
-              <div
-                className="progress-bar"
-                style={{
-                  width: `${progress.percentage}%`,
-                  background: progress.status === 'completed'
-                    ? 'var(--gradient-success)'
-                    : progress.status === 'failed'
-                      ? 'var(--gradient-danger)'
-                      : 'var(--gradient-accent)',
-                }}
-              />
-            </div>
+            {uploading ? (
+              <div className="progress-container" style={{ height: 16, marginBottom: 'var(--space-lg)' }}>
+                <div
+                  className="progress-bar"
+                  style={{
+                    width: `${uploadProgress ?? 0}%`,
+                    background: 'var(--color-primary)',
+                    height: '100%',
+                    transition: 'width var(--transition-fast)',
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="progress-container" style={{ height: 16, marginBottom: 'var(--space-lg)', display: 'flex' }}>
+                {!progress || progress.total_rows === 0 ? (
+                  <div
+                    className="progress-bar"
+                    style={{
+                      width: `${progress?.percentage ?? 0}%`,
+                      background: progress?.status === 'failed' ? 'var(--color-danger)' : 'var(--color-primary)',
+                      height: '100%',
+                      transition: 'width var(--transition-base)',
+                    }}
+                  />
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        width: `${(progress.inserted_count / progress.total_rows) * 100}%`,
+                        background: 'var(--color-success)',
+                        height: '100%',
+                        transition: 'width var(--transition-fast)',
+                      }}
+                      title={`Inserted: ${progress.inserted_count}`}
+                    />
+                    <div
+                      style={{
+                        width: `${(progress.updated_count / progress.total_rows) * 100}%`,
+                        background: 'var(--color-info)',
+                        height: '100%',
+                        transition: 'width var(--transition-fast)',
+                      }}
+                      title={`Updated: ${progress.updated_count}`}
+                    />
+                    <div
+                      style={{
+                        width: `${(progress.error_count / progress.total_rows) * 100}%`,
+                        background: 'var(--color-danger)',
+                        height: '100%',
+                        transition: 'width var(--transition-fast)',
+                      }}
+                      title={`Errors: ${progress.error_count}`}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
             <div style={{ textAlign: 'center', marginBottom: 'var(--space-lg)', fontSize: '1.5rem', fontWeight: 700 }}>
-              {progress.percentage.toFixed(1)}%
+              {uploading ? `${uploadProgress ?? 0}%` : `${progress?.percentage?.toFixed(1) ?? '0.0'}%`}
             </div>
 
             {/* Stats */}
-            <div className="import-stats">
-              <div className="import-stat">
-                <div className="label">Processed</div>
-                <div className="value">{progress.processed_rows.toLocaleString()}</div>
-              </div>
-              <div className="import-stat">
-                <div className="label">Inserted</div>
-                <div className="value" style={{ color: 'var(--color-success)' }}>
-                  {progress.inserted_count.toLocaleString()}
+            {!uploading && progress && (
+              <div className="import-stats">
+                <div className="import-stat">
+                  <div className="label">Processed</div>
+                  <div className="value">{progress.processed_rows.toLocaleString()}</div>
+                </div>
+                <div className="import-stat">
+                  <div className="label">Inserted</div>
+                  <div className="value" style={{ color: 'var(--color-success)' }}>
+                    {progress.inserted_count.toLocaleString()}
+                  </div>
+                </div>
+                <div className="import-stat">
+                  <div className="label">Updated</div>
+                  <div className="value" style={{ color: 'var(--color-info)' }}>
+                    {progress.updated_count.toLocaleString()}
+                  </div>
+                </div>
+                <div className="import-stat">
+                  <div className="label">Errors</div>
+                  <div className="value" style={{ color: progress.error_count > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                    {progress.error_count.toLocaleString()}
+                  </div>
                 </div>
               </div>
-              <div className="import-stat">
-                <div className="label">Updated</div>
-                <div className="value" style={{ color: 'var(--color-info)' }}>
-                  {progress.updated_count.toLocaleString()}
-                </div>
+            )}
+
+            {/* Error Detail Display */}
+            {!uploading && progress && progress.status === 'failed' && (
+              <div style={{ padding: 'var(--space-md)', background: 'var(--color-danger-muted)', color: 'var(--color-danger)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-lg)', fontSize: '0.9rem' }}>
+                <strong>Failure Reason:</strong> {progress.error || 'Unknown error occurred during import.'}
               </div>
-              <div className="import-stat">
-                <div className="label">Errors</div>
-                <div className="value" style={{ color: progress.error_count > 0 ? 'var(--color-danger)' : 'var(--text-primary)' }}>
-                  {progress.error_count.toLocaleString()}
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Error List */}
-            {allErrors.length > 0 && (
-              <details style={{ marginTop: 'var(--space-md)' }}>
+            {!uploading && allErrors.length > 0 && (
+              <details style={{ marginTop: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
                 <summary style={{ cursor: 'pointer', color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 600 }}>
                   Show errors ({allErrors.length})
                 </summary>
@@ -266,12 +374,31 @@ export default function DashboardPage() {
               </details>
             )}
 
-            {/* Retry button */}
-            {progress.status === 'failed' && currentTaskId && (
-              <div style={{ textAlign: 'center', marginTop: 'var(--space-lg)' }}>
-                <button className="btn btn-primary" onClick={() => handleRetry(currentTaskId)} id="retry-btn">
-                  ↻ Retry Import
-                </button>
+            {/* Action buttons (Try Again / Import Another / Retry) */}
+            {!uploading && (
+              <div style={{ display: 'flex', gap: 'var(--space-md)', justifyContent: 'center', marginTop: 'var(--space-lg)' }}>
+                {progress && progress.status === 'completed' && (
+                  <button className="btn btn-primary" onClick={handleClearProgress} id="done-import-btn">
+                    Import Another File
+                  </button>
+                )}
+                {progress && progress.status === 'failed' && (
+                  <>
+                    <button className="btn btn-ghost" onClick={handleClearProgress} id="clear-failed-btn">
+                      Upload New File
+                    </button>
+                    {currentTaskId && (
+                      <button className="btn btn-primary" onClick={() => handleRetry(currentTaskId)} id="retry-btn">
+                        Retry Import
+                      </button>
+                    )}
+                  </>
+                )}
+                {(!progress && !isConnected) && (
+                  <button className="btn btn-danger" onClick={handleClearProgress} id="reset-connection-btn">
+                    Try Again / Upload New File
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -289,7 +416,6 @@ export default function DashboardPage() {
             </div>
           ) : tasks.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state-icon">📋</div>
               <h3>No imports yet</h3>
               <p>Upload your first CSV file to get started</p>
             </div>
@@ -309,7 +435,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.map((task) => (
+                  {getDisplayTasks().map((task) => (
                     <tr key={task.id} className="animate-in">
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                         {task.filename || '—'}
