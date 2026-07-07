@@ -1,0 +1,53 @@
+# Railway configuration
+# This file tells Railway how to build and run each service in the monorepo.
+# Services are configured individually in the Railway dashboard using these settings.
+
+# Backend service
+[services.backend]
+source = "backend"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+
+[services.backend.variables]
+PORT = "8000"
+DEBUG = "false"
+UPLOAD_DIR = "/tmp/product-hub/uploads"
+CSV_BATCH_SIZE = "5000"
+WEBHOOK_TIMEOUT_SECONDS = "10"
+MAX_UPLOAD_SIZE_MB = "100"
+# DATABASE_URL, DATABASE_SYNC_URL, REDIS_URL, CELERY_BROKER_URL,
+# CELERY_RESULT_BACKEND, and CORS_ORIGINS must be set manually in
+# the Railway dashboard after adding PostgreSQL and Redis plugins.
+
+# Celery worker service (same Docker image as backend, different command)
+[services.celery-worker]
+source = "backend"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+startCommand = "celery -A app.celery_app:celery_app worker --loglevel=info --queues=csv,webhooks,celery --concurrency=2"
+
+[services.celery-worker.variables]
+UPLOAD_DIR = "/tmp/product-hub/uploads"
+CSV_BATCH_SIZE = "5000"
+# Same DATABASE_URL, REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+# must be set in the Railway dashboard.
+
+# Frontend service
+[services.frontend]
+source = "frontend"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+startCommand = "npm start"
+
+[services.frontend.variables]
+PORT = "3000"
+# NEXT_PUBLIC_API_URL must be set in the Railway dashboard to the
+# public URL of the backend service, e.g.:
+# NEXT_PUBLIC_API_URL=https://your-backend.up.railway.app/api/v1
+#
+# IMPORTANT: Because NEXT_PUBLIC_API_URL is baked into the Next.js
+# build at build time (via the Dockerfile ARG), you need to set it
+# as a build argument in Railway, not just a runtime env var.
+# In the Railway frontend service settings:
+#   Build Arguments: NEXT_PUBLIC_API_URL=${{backend.RAILWAY_PUBLIC_DOMAIN}}/api/v1
