@@ -1,0 +1,27 @@
+# FastAPI & Server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+sse-starlette==2.2.1
+slowapi==0.1.9
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.1
+psycopg2-binary==2.9.10
+
+# Celery & Redis
+celery[redis]==5.4.0
+redis==5.2.1
+
+# Validation & Serialization
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP client (for webhooks)
+httpx==0.28.1
+
+# Utilities
+python-dotenv==1.0.1
+uuid6==2024.7.10
