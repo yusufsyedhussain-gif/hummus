@@ -435,14 +435,15 @@ export default function ProductsPage() {
                         </span>
                       </td>
 
-                      {/* Description - strip any embedded name/sku prefix from backend data */}
+                      {/* Description - extract only the description text */}
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '260px' }}>
                         <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {(() => {
                             const raw = product.description || '';
-                            // Strip patterns like "name: X | sku: Y | description: Z"
-                            const match = raw.match(/description:\s*(.+)$/i);
-                            const clean = match ? match[1].trim() : raw;
+                            // Handle "name: X | sku: Y | description: Z" format
+                            // Split on "description:" (case-insensitive) and take everything after it
+                            const parts = raw.split(/description:\s*/i);
+                            const clean = parts.length > 1 ? parts[parts.length - 1].trim() : raw.trim();
                             return clean || <em style={{ color: 'var(--text-muted)' }}>—</em>;
                           })()}
                         </span>

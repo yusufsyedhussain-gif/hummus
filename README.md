@@ -90,10 +90,8 @@ The importer expects a CSV with the following columns:
 |---|---|---|
 | `sku` | Yes | Unique identifier, max 100 characters |
 | `name` | Yes | Product name, max 500 characters |
-| `price` | Yes | Numeric, must be 0 or greater |
-| `description` | No | Free text |
-| `quantity` | No | Integer, defaults to 0 |
-| `status` | No | `active` or `inactive`, defaults to `active` |
+| `description` | Yes | Free text |
+| `status` | Yes | `active` or `inactive`, defaults to `active` |
 
 Example:
 
