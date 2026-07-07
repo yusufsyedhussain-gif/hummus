@@ -23,6 +23,31 @@ class Settings(BaseSettings):
     # Sync database URL for Celery workers (asyncpg doesn't work in sync context)
     DATABASE_SYNC_URL: str = "postgresql+psycopg2://producthub:producthub@localhost:5432/producthub"
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def fix_db_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql://", 1)
+            if v.startswith("postgresql://"):
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("DATABASE_SYNC_URL", mode="before")
+    @classmethod
+    def fix_sync_db_url(cls, v: str, info) -> str:
+        # If the sync URL wasn't provided but async URL was, derive it
+        db_url = info.data.get("DATABASE_URL")
+        if db_url and (not v or "localhost:5432" in v):
+            return db_url.replace("+asyncpg", "+psycopg2")
+            
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql://", 1)
+            if v.startswith("postgresql://"):
+                v = v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
