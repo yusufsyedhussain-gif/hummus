@@ -31,6 +31,12 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql://", 1)
             if v.startswith("postgresql://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # For Supabase / PgBouncer, completely disable prepared statements in URL
+            if "pooler.supabase.com" in v or ":6543" in v:
+                separator = "&" if "?" in v else "?"
+                if "prepared_statement_cache_size" not in v:
+                    v += f"{separator}prepared_statement_cache_size=0&statement_cache_size=0"
         return v
 
     @field_validator("DATABASE_SYNC_URL", mode="before")

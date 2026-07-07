@@ -17,12 +17,7 @@ engine_kwargs = {
 if is_pgbouncer:
     # Disable SQLAlchemy connection pool since PgBouncer is already pooling
     engine_kwargs["poolclass"] = NullPool
-    # Disable SQLAlchemy prepared statements and asyncpg's internal statement cache
-    engine_kwargs["connect_args"] = {
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-        "prepared_statement_name_func": lambda: None,
-    }
+    # Prepared statement caching is disabled via URL parameters in config.py
 else:
     engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
     engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
