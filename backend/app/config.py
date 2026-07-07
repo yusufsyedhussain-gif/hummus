@@ -1,7 +1,9 @@
 """Application configuration using pydantic-settings."""
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
+import json
 
 
 class Settings(BaseSettings):
@@ -37,6 +39,18 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str):
+            if v.startswith("["):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v
 
     model_config = {
         "env_file": ".env",
