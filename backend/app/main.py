@@ -61,8 +61,8 @@ if len(cors_origins) == 1 and cors_origins[0].startswith("["):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
