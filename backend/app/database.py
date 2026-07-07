@@ -18,8 +18,10 @@ if is_pgbouncer:
     # Disable SQLAlchemy connection pool since PgBouncer is already pooling
     engine_kwargs["poolclass"] = NullPool
     # Disable asyncpg's internal statement cache for type introspection
+    # Use unnamed prepared statements to avoid DuplicatePreparedStatementError in 2.0.36
     engine_kwargs["connect_args"] = {
         "statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: "",
     }
 else:
     engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
