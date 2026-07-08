@@ -42,27 +42,15 @@ def publish_progress(task_id: str, data: dict):
     default_retry_delay=30,
     acks_late=True,
 )
-def process_csv_import(self, task_id: str):
+def process_csv_import(self, task_id: str, csv_text: str):
     """
-    Process a CSV file: read from Redis, stream, validate, and bulk upsert products.
+    Process a CSV file: stream from text, validate, and bulk upsert products.
+    csv_text is passed directly from the upload endpoint via Celery task args.
     Publishes real-time progress via Redis Pub/Sub.
     """
     db = SyncSession()
 
     try:
-        # Fetch CSV content from Redis
-        csv_bytes = redis_client.get(f"csv:{task_id}")
-        if not csv_bytes:
-            logger.error(f"CSV content not found in Redis for task={task_id}")
-            _update_task_status(db, task_id, "failed")
-            publish_progress(task_id, {"task_id": task_id, "status": "failed", "error": "CSV content expired or missing",
-                                       "processed_rows": 0, "total_rows": 0, "inserted_count": 0,
-                                       "updated_count": 0, "error_count": 0, "percentage": 0, "current_batch_errors": []})
-            return {"task_id": task_id, "status": "failed"}
-
-        csv_text = csv_bytes.decode("utf-8-sig")
-
-        # Update task status to 'parsing'
         _update_task_status(db, task_id, "parsing")
         publish_progress(task_id, {"status": "parsing", "percentage": 0})
 
@@ -83,7 +71,6 @@ def process_csv_import(self, task_id: str):
                 "inserted_count": 0, "updated_count": 0, "error_count": 0,
                 "current_batch_errors": [],
             })
-            redis_client.delete(f"csv:{task_id}")
             return {"task_id": task_id, "status": "completed"}
 
         # Process in batches
@@ -169,9 +156,6 @@ def process_csv_import(self, task_id: str):
             f"CSV import complete: task={task_id}, "
             f"inserted={total_inserted}, updated={total_updated}, errors={total_errors}"
         )
-
-        # Delete CSV from Redis now that we're done
-        redis_client.delete(f"csv:{task_id}")
 
         return {
             "task_id": task_id,

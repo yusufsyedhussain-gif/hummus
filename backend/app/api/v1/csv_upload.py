@@ -23,9 +23,6 @@ settings = get_settings()
 
 router = APIRouter(tags=["CSV Import"])
 
-# TTL for CSV content stored in Redis (24 hours)
-CSV_REDIS_TTL = 86400
-
 
 @router.post("/csv/upload", status_code=202)
 async def upload_csv(
@@ -34,8 +31,8 @@ async def upload_csv(
 ):
     """
     Upload a CSV file for async processing.
-    Stores CSV content in Redis so the Celery worker can access it
-    across containers (avoids shared-filesystem dependency).
+    CSV content is passed directly to the Celery task as an argument
+    (stored in broker/Redis by Celery automatically).
     Returns immediately with a task_id for progress tracking.
     """
     # Validate file type
@@ -56,13 +53,11 @@ async def upload_csv(
 
     task_id = str(uuid.uuid4())
 
-    # Store CSV content in Redis (shared between web + worker containers)
-    redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
+    # Decode CSV content — pass directly to Celery (no separate Redis key needed)
     try:
-        redis_key = f"csv:{task_id}"
-        await redis_client.set(redis_key, content, ex=CSV_REDIS_TTL)
-    finally:
-        await redis_client.aclose()
+        csv_text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        csv_text = content.decode("latin-1")
 
     # Create import task record
     import_task = ImportTask(
@@ -73,8 +68,8 @@ async def upload_csv(
     db.add(import_task)
     await db.flush()
 
-    # Enqueue Celery task — pass task_id only, worker reads CSV from Redis
-    process_csv_import.delay(task_id)
+    # Enqueue Celery task — CSV content travels with the task message in the broker
+    process_csv_import.delay(task_id, csv_text)
 
     logger.info(f"CSV upload accepted: task={task_id}, file={file.filename}, size={len(content)} bytes")
 
@@ -173,30 +168,12 @@ async def retry_task(
             detail=f"Can only retry failed tasks. Current status: {task.status}",
         )
 
-    # Check if CSV content still exists in Redis
-    redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
-    try:
-        csv_exists = await redis_client.exists(f"csv:{task_id}")
-    finally:
-        await redis_client.aclose()
-
-    if not csv_exists:
-        raise HTTPException(
-            status_code=410,
-            detail="Original CSV file no longer available. Please re-upload.",
-        )
-
-    # Reset task
-    task.status = "queued"
-    task.processed_rows = 0
-    task.inserted_count = 0
-    task.updated_count = 0
-    task.error_count = 0
-    task.errors = []
-    task.completed_at = None
-    await db.flush()
-
-    process_csv_import.delay(task_id)
+    # For retry, we can't re-use the original CSV (it was passed as a task argument, not stored).
+    # Inform the user they need to re-upload.
+    raise HTTPException(
+        status_code=410,
+        detail="Retry is not supported. Please re-upload the CSV file to start a new import.",
+    )
 
     return {"task_id": task_id, "status": "queued", "message": "Import retry queued"}
 
