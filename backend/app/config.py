@@ -69,6 +69,18 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
+    @classmethod
+    def clean_redis_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            # Strip ssl_cert_reqs to prevent it from confusing redis-py
+            # (We pass it explicitly via kwargs in the code where needed)
+            import re
+            v = re.sub(r'[?&]ssl_cert_reqs=[^&]+', '', v)
+            if v.endswith('?'):
+                v = v[:-1]
+        return v
 
     # CSV Upload
     MAX_UPLOAD_SIZE_MB: int = 100
