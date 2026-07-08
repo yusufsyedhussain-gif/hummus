@@ -4,6 +4,8 @@ import uuid
 import json
 import asyncio
 import logging
+import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -43,21 +45,15 @@ async def upload_csv(
         )
 
     # Validate file size
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    content = await file.read()
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File size exceeds maximum of {settings.MAX_UPLOAD_SIZE_MB}MB",
-        )
-
+    # Stream upload to disk to save memory
     task_id = str(uuid.uuid4())
+    
+    upload_dir = Path(settings.UPLOAD_DIR)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f"{task_id}.csv"
 
-    # Decode CSV content — pass directly to Celery (no separate Redis key needed)
-    try:
-        csv_text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        csv_text = content.decode("latin-1")
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
     # Create import task record
     import_task = ImportTask(
@@ -68,10 +64,10 @@ async def upload_csv(
     db.add(import_task)
     await db.flush()
 
-    # Enqueue Celery task — CSV content travels with the task message in the broker
-    process_csv_import.delay(task_id, csv_text)
+    # Enqueue Celery task — pass the filepath
+    process_csv_import.delay(task_id, str(filepath))
 
-    logger.info(f"CSV upload accepted: task={task_id}, file={file.filename}, size={len(content)} bytes")
+    logger.info(f"CSV upload accepted: task={task_id}, file={file.filename}")
 
     return {
         "task_id": task_id,
@@ -168,12 +164,25 @@ async def retry_task(
             detail=f"Can only retry failed tasks. Current status: {task.status}",
         )
 
-    # For retry, we can't re-use the original CSV (it was passed as a task argument, not stored).
-    # Inform the user they need to re-upload.
-    raise HTTPException(
-        status_code=410,
-        detail="Retry is not supported. Please re-upload the CSV file to start a new import.",
-    )
+    # For retry, we just re-enqueue if the file still exists
+    filepath = Path(settings.UPLOAD_DIR) / f"{task_id}.csv"
+    if not filepath.exists():
+        raise HTTPException(
+            status_code=410,
+            detail="Original CSV file no longer available. Please re-upload.",
+        )
+
+    # Reset task
+    task.status = "queued"
+    task.processed_rows = 0
+    task.inserted_count = 0
+    task.updated_count = 0
+    task.error_count = 0
+    task.errors = []
+    task.completed_at = None
+    await db.flush()
+
+    process_csv_import.delay(task_id, str(filepath))
 
     return {"task_id": task_id, "status": "queued", "message": "Import retry queued"}
 

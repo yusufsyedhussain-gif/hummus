@@ -11,9 +11,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.celery_app import celery_app
 from app.config import get_settings
+import os
 from app.services.csv_service import (
-    count_csv_rows_from_text,
-    stream_csv_batches_from_text,
+    count_csv_rows,
+    stream_csv_batches,
     validate_row,
     bulk_upsert_products,
 )
@@ -42,13 +43,13 @@ def publish_progress(task_id: str, data: dict):
     default_retry_delay=30,
     acks_late=True,
 )
-def process_csv_import(self, task_id: str, csv_text: str):
+def process_csv_import(self, task_id: str, filepath: str):
     """
-    Process a CSV file: stream from text, validate, and bulk upsert products.
-    csv_text is passed directly from the upload endpoint via Celery task args.
+    Process a CSV file: stream from disk, validate, and bulk upsert products.
+    filepath is passed from the upload endpoint.
     Publishes real-time progress via Redis Pub/Sub.
     """
-    logger.info(f"[task={task_id}] Celery task started, csv_text length={len(csv_text) if csv_text else 0}")
+    logger.info(f"[task={task_id}] Celery task started, filepath={filepath}")
     db = SyncSession()
 
     try:
@@ -60,8 +61,8 @@ def process_csv_import(self, task_id: str, csv_text: str):
         _update_task_status(db, task_id, "parsing")
         publish_progress(task_id, {"status": "parsing", "percentage": 0})
 
-        # Count total rows (from in-memory text)
-        total_rows = count_csv_rows_from_text(csv_text)
+        # Count total rows (streaming from disk)
+        total_rows = count_csv_rows(filepath)
         db.execute(
             _task_update_sql(),
             {"id": task_id, "total_rows": total_rows, "status": "parsing",
@@ -89,7 +90,7 @@ def process_csv_import(self, task_id: str, csv_text: str):
 
         _update_task_status(db, task_id, "importing")
 
-        for batch in stream_csv_batches_from_text(csv_text, settings.CSV_BATCH_SIZE):
+        for batch in stream_csv_batches(filepath, settings.CSV_BATCH_SIZE):
             batch_number += 1
             valid_rows = []
             batch_errors = []
@@ -162,6 +163,10 @@ def process_csv_import(self, task_id: str, csv_text: str):
             f"CSV import complete: task={task_id}, "
             f"inserted={total_inserted}, updated={total_updated}, errors={total_errors}"
         )
+
+        # Cleanup file
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
         return {
             "task_id": task_id,
