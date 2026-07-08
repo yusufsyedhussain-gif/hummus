@@ -76,8 +76,10 @@ export function useSSE(url: string | null, options: UseSSEOptions = {}) {
 
     const taskUrl = taskUrlFromProgressUrl(url);
     setIsConnected(true);
+    let hasFiredCompletion = false;
 
     const poll = async () => {
+      if (hasFiredCompletion) return;
       try {
         const res = await fetch(taskUrl);
         if (!res.ok) return;
@@ -121,12 +123,14 @@ export function useSSE(url: string | null, options: UseSSEOptions = {}) {
         setProgress(data);
         optionsRef.current.onProgress?.(data);
 
-        if (data.status === 'completed') {
+        if (data.status === 'completed' && !hasFiredCompletion) {
+          hasFiredCompletion = true;
           stopPolling();
           optionsRef.current.onComplete?.(data);
         }
 
-        if (data.status === 'failed') {
+        if (data.status === 'failed' && !hasFiredCompletion) {
+          hasFiredCompletion = true;
           stopPolling();
           optionsRef.current.onError?.(data.error || 'Import failed');
         }
