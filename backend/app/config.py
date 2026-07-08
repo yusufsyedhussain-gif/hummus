@@ -48,7 +48,11 @@ class Settings(BaseSettings):
         # If the sync URL wasn't provided but async URL was, derive it
         db_url = info.data.get("DATABASE_URL")
         if db_url and (not v or "localhost:5432" in v):
-            return db_url.replace("+asyncpg", "+psycopg2")
+            sync_url = db_url.replace("+asyncpg", "+psycopg2")
+            # Strip asyncpg-specific params that psycopg2/PostgreSQL don't understand
+            sync_url = sync_url.replace("?pgbouncer=true&", "?").replace("&pgbouncer=true", "").replace("?pgbouncer=true", "")
+            sync_url = sync_url.replace("?prepared_statement_cache_size=0&", "?").replace("&prepared_statement_cache_size=0", "").replace("?prepared_statement_cache_size=0", "")
+            return sync_url
             
         if isinstance(v, str):
             if v.startswith("postgres://"):
