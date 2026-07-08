@@ -57,7 +57,7 @@ async def upload_csv(
     task_id = str(uuid.uuid4())
 
     # Store CSV content in Redis (shared between web + worker containers)
-    redis_client = aioredis.from_url(settings.REDIS_URL)
+    redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
     try:
         redis_key = f"csv:{task_id}"
         await redis_client.set(redis_key, content, ex=CSV_REDIS_TTL)
@@ -92,7 +92,7 @@ async def task_progress_sse(task_id: str):
     Subscribes to Redis Pub/Sub channel for the given task.
     """
     async def event_generator():
-        redis_client = aioredis.from_url(settings.REDIS_URL)
+        redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
         pubsub = redis_client.pubsub()
         channel = f"task:{task_id}:progress"
 
@@ -174,7 +174,7 @@ async def retry_task(
         )
 
     # Check if CSV content still exists in Redis
-    redis_client = aioredis.from_url(settings.REDIS_URL)
+    redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
     try:
         csv_exists = await redis_client.exists(f"csv:{task_id}")
     finally:
