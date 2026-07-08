@@ -43,6 +43,54 @@ def count_csv_rows(filepath: str) -> int:
     return count
 
 
+def count_csv_rows_from_text(csv_text: str) -> int:
+    """Count total data rows in CSV string (excludes header if detected)."""
+    count = 0
+    reader = csv.reader(io.StringIO(csv_text))
+    try:
+        first_row = next(reader)
+    except StopIteration:
+        return 0
+    _, has_header = detect_headers(first_row)
+    if has_header:
+        for _ in reader:
+            count += 1
+    else:
+        count = 1
+        for _ in reader:
+            count += 1
+    return count
+
+
+def stream_csv_batches_from_text(csv_text: str, batch_size: int) -> Generator[list[dict], None, None]:
+    """Stream CSV string in batches. Yields lists of raw row dicts mapped to headers."""
+    batch = []
+    reader = csv.reader(io.StringIO(csv_text))
+    try:
+        first_row = next(reader)
+    except StopIteration:
+        return
+
+    headers, has_header = detect_headers(first_row)
+
+    if not has_header:
+        row_dict = {headers[i]: val for i, val in enumerate(first_row) if i < len(headers)}
+        batch.append(row_dict)
+
+    for row in reader:
+        row_dict = {}
+        for i, val in enumerate(row):
+            header_name = headers[i] if i < len(headers) else f"col_{i}"
+            row_dict[header_name] = val
+        batch.append(row_dict)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+
 def detect_headers(first_row: list[str]) -> tuple[list[str], bool]:
     """Check if first_row looks like a header, otherwise generate default col_N headers."""
     header_keywords = {"sku", "name", "price", "title", "id", "qty", "quantity", "description", "status", "cost"}

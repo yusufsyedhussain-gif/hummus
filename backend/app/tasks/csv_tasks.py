@@ -1,8 +1,8 @@
 """Celery task for asynchronous CSV import processing."""
 
+import io
 import json
 import logging
-import uuid
 from datetime import datetime, timezone
 
 import redis
@@ -12,11 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from app.celery_app import celery_app
 from app.config import get_settings
 from app.services.csv_service import (
-    count_csv_rows,
-    stream_csv_batches,
+    count_csv_rows_from_text,
+    stream_csv_batches_from_text,
     validate_row,
     bulk_upsert_products,
-    cleanup_temp_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,20 +42,32 @@ def publish_progress(task_id: str, data: dict):
     default_retry_delay=30,
     acks_late=True,
 )
-def process_csv_import(self, task_id: str, filepath: str):
+def process_csv_import(self, task_id: str):
     """
-    Process a CSV file: stream, validate, and bulk upsert products.
+    Process a CSV file: read from Redis, stream, validate, and bulk upsert products.
     Publishes real-time progress via Redis Pub/Sub.
     """
     db = SyncSession()
 
     try:
+        # Fetch CSV content from Redis
+        csv_bytes = redis_client.get(f"csv:{task_id}")
+        if not csv_bytes:
+            logger.error(f"CSV content not found in Redis for task={task_id}")
+            _update_task_status(db, task_id, "failed")
+            publish_progress(task_id, {"task_id": task_id, "status": "failed", "error": "CSV content expired or missing",
+                                       "processed_rows": 0, "total_rows": 0, "inserted_count": 0,
+                                       "updated_count": 0, "error_count": 0, "percentage": 0, "current_batch_errors": []})
+            return {"task_id": task_id, "status": "failed"}
+
+        csv_text = csv_bytes.decode("utf-8-sig")
+
         # Update task status to 'parsing'
         _update_task_status(db, task_id, "parsing")
         publish_progress(task_id, {"status": "parsing", "percentage": 0})
 
-        # Count total rows
-        total_rows = count_csv_rows(filepath)
+        # Count total rows (from in-memory text)
+        total_rows = count_csv_rows_from_text(csv_text)
         db.execute(
             _task_update_sql(),
             {"id": task_id, "total_rows": total_rows, "status": "parsing",
@@ -72,7 +83,7 @@ def process_csv_import(self, task_id: str, filepath: str):
                 "inserted_count": 0, "updated_count": 0, "error_count": 0,
                 "current_batch_errors": [],
             })
-            cleanup_temp_file(filepath)
+            redis_client.delete(f"csv:{task_id}")
             return {"task_id": task_id, "status": "completed"}
 
         # Process in batches
@@ -82,17 +93,16 @@ def process_csv_import(self, task_id: str, filepath: str):
         total_errors = 0
         all_errors = []
         batch_number = 0
-        row_offset = 1  # 1-indexed, after header
 
         _update_task_status(db, task_id, "importing")
 
-        for batch in stream_csv_batches(filepath, settings.CSV_BATCH_SIZE):
+        for batch in stream_csv_batches_from_text(csv_text, settings.CSV_BATCH_SIZE):
             batch_number += 1
             valid_rows = []
             batch_errors = []
 
             for i, row in enumerate(batch):
-                row_number = row_offset + total_processed + i
+                row_number = total_processed + i + 1
                 validated, error = validate_row(row, row_number)
 
                 if validated:
@@ -160,7 +170,8 @@ def process_csv_import(self, task_id: str, filepath: str):
             f"inserted={total_inserted}, updated={total_updated}, errors={total_errors}"
         )
 
-        cleanup_temp_file(filepath)
+        # Delete CSV from Redis now that we're done
+        redis_client.delete(f"csv:{task_id}")
 
         return {
             "task_id": task_id,
@@ -185,7 +196,6 @@ def process_csv_import(self, task_id: str, filepath: str):
             "percentage": 0,
             "current_batch_errors": [],
         })
-        cleanup_temp_file(filepath)
         raise self.retry(exc=exc)
 
     finally:
