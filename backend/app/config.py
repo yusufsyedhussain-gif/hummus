@@ -37,6 +37,9 @@ class Settings(BaseSettings):
                 separator = "&" if "?" in v else "?"
                 if "prepared_statement_cache_size" not in v:
                     v += f"{separator}prepared_statement_cache_size=0"
+                    
+            # Strip pgbouncer=true since SQLAlchemy dialects don't support it as a kwarg
+            v = v.replace("?pgbouncer=true&", "?").replace("&pgbouncer=true", "").replace("?pgbouncer=true", "")
         return v
 
     @field_validator("DATABASE_SYNC_URL", mode="before")
@@ -52,12 +55,25 @@ class Settings(BaseSettings):
                 v = v.replace("postgres://", "postgresql://", 1)
             if v.startswith("postgresql://"):
                 v = v.replace("postgresql://", "postgresql+psycopg2://", 1)
+                
+            # Strip pgbouncer=true or asyncpg specific params for sync URL
+            v = v.replace("?pgbouncer=true&", "?").replace("&pgbouncer=true", "").replace("?pgbouncer=true", "")
+            v = v.replace("?prepared_statement_cache_size=0&", "?").replace("&prepared_statement_cache_size=0", "").replace("?prepared_statement_cache_size=0", "")
         return v
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
+    @classmethod
+    def fix_redis_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("rediss://"):
+            if "ssl_cert_reqs" not in v:
+                separator = "&" if "?" in v else "?"
+                v += f"{separator}ssl_cert_reqs=CERT_NONE"
+        return v
 
     # CSV Upload
     MAX_UPLOAD_SIZE_MB: int = 100
