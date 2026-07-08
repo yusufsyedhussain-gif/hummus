@@ -1,20 +1,18 @@
-#!/bin/sh
-# start.sh — runs FastAPI and Celery worker in a single container.
-# Used for the Render free-tier deployment where only one process is allowed.
-
+#!/bin/bash
 set -e
 
-# Create upload directory if it doesn't exist
-mkdir -p /tmp/product-hub/uploads
-
 echo "Starting Celery worker in background..."
+# --pool=solo: single-threaded, no forking — saves ~80MB vs prefork
+# --concurrency=1: only one task at a time
 celery -A app.celery_app:celery_app worker \
-  --loglevel=info \
-  --queues=csv,webhooks,celery \
-  --concurrency=2 &
+    --loglevel=info \
+    --queues=csv,webhooks,celery \
+    --concurrency=1 \
+    --pool=solo &
 
 echo "Starting FastAPI server..."
+# --workers 1: single uvicorn process — the app is I/O-bound (async), not CPU-bound
 exec uvicorn app.main:app \
-  --host 0.0.0.0 \
-  --port "${PORT:-8000}" \
-  --workers 1
+    --host 0.0.0.0 \
+    --port "${PORT:-8000}" \
+    --workers 1
