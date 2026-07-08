@@ -83,7 +83,8 @@ async def task_progress_sse(task_id: str):
     Subscribes to Redis Pub/Sub channel for the given task.
     """
     async def event_generator():
-        redis_client = aioredis.from_url(settings.CELERY_BROKER_URL)
+        redis_kwargs = {"ssl_cert_reqs": "none"} if settings.CELERY_BROKER_URL.startswith("rediss://") else {}
+        redis_client = aioredis.from_url(settings.CELERY_BROKER_URL, **redis_kwargs)
         pubsub = redis_client.pubsub()
         channel = f"task:{task_id}:progress"
 

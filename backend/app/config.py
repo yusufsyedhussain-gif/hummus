@@ -70,15 +70,6 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
-    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
-    @classmethod
-    def fix_redis_url(cls, v: str) -> str:
-        if isinstance(v, str) and v.startswith("rediss://"):
-            if "ssl_cert_reqs" not in v:
-                separator = "&" if "?" in v else "?"
-                v += f"{separator}ssl_cert_reqs=CERT_NONE"
-        return v
-
     # CSV Upload
     MAX_UPLOAD_SIZE_MB: int = 100
     CSV_BATCH_SIZE: int = 10000

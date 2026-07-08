@@ -27,7 +27,8 @@ sync_engine = create_engine(settings.DATABASE_SYNC_URL)
 SyncSession = sessionmaker(bind=sync_engine)
 
 # Redis client for publishing progress
-redis_client = redis.from_url(settings.CELERY_BROKER_URL)
+_redis_kwargs = {"ssl_cert_reqs": "none"} if settings.CELERY_BROKER_URL.startswith("rediss://") else {}
+redis_client = redis.from_url(settings.CELERY_BROKER_URL, **_redis_kwargs)
 
 
 def publish_progress(task_id: str, data: dict):
