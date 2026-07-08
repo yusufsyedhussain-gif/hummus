@@ -48,9 +48,15 @@ def process_csv_import(self, task_id: str, csv_text: str):
     csv_text is passed directly from the upload endpoint via Celery task args.
     Publishes real-time progress via Redis Pub/Sub.
     """
+    logger.info(f"[task={task_id}] Celery task started, csv_text length={len(csv_text) if csv_text else 0}")
     db = SyncSession()
 
     try:
+        logger.info(f"[task={task_id}] Opening DB session, testing connection...")
+        # Quick connection test
+        from sqlalchemy import text as sa_text
+        db.execute(sa_text("SELECT 1"))
+        logger.info(f"[task={task_id}] DB connection OK")
         _update_task_status(db, task_id, "parsing")
         publish_progress(task_id, {"status": "parsing", "percentage": 0})
 
