@@ -136,6 +136,19 @@ The defaults in `docker-compose.yml` work out of the box for local use. If you a
 | `CORS_ORIGINS` | backend | JSON array of allowed frontend origins |
 | `NEXT_PUBLIC_API_URL` | frontend | Backend base URL as seen by the browser |
 
+## Deployment on Render
+
+This application has been optimized for deployment on Render.com's free tier. 
+
+Because free instances have limited memory (512MB) and do not support shared disk volumes, the backend is configured to run **both** the FastAPI server and the Celery worker inside a **single** Web Service container using the provided `start.sh` script.
+
+To deploy on Render:
+1. Create a new **Web Service**.
+2. Set the Build Command to `pip install -r requirements.txt`.
+3. Set the Start Command to `./start.sh`.
+4. Add your environment variables (Database URL, Redis URL, CORS Origins).
+5. **DO NOT** create a separate Background Worker service on Render. If you run a separate background worker, it will not share the `/tmp` disk with the Web Service, and CSV file uploads will fail with `FileNotFoundError`.
+
 ## License
 
 MIT
