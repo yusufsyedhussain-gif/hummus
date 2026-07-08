@@ -12,6 +12,8 @@ from typing import Generator
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from app.models.product import Product
 
 from app.config import get_settings
 
@@ -301,22 +303,25 @@ def bulk_upsert_products(db: Session, valid_rows: list[dict]) -> tuple[int, int]
     updated_count = sum(1 for r in unique_rows if r["sku_lower"] in existing_skus)
     inserted_count = len(unique_rows) - updated_count
 
-    # Execute bulk upsert without RETURNING
-    upsert_sql = text("""
-        INSERT INTO products (id, sku, sku_lower, name, description, price, quantity, is_active, created_at, updated_at)
-        VALUES (gen_random_uuid(), :sku, :sku_lower, :name, :description, :price, :quantity, :is_active, NOW(), NOW())
-        ON CONFLICT (sku_lower)
-        DO UPDATE SET
-            sku = EXCLUDED.sku,
-            name = EXCLUDED.name,
-            description = EXCLUDED.description,
-            price = EXCLUDED.price,
-            quantity = EXCLUDED.quantity,
-            is_active = EXCLUDED.is_active,
-            updated_at = NOW()
-    """)
+    # Execute bulk upsert using SQLAlchemy's postgresql specific insert
+    # Using .values() constructs a single query with ALL rows, executing in 1 network roundtrip!
+    stmt = pg_insert(Product).values(unique_rows)
+    
+    # Configure ON CONFLICT DO UPDATE
+    stmt = stmt.on_conflict_do_update(
+        index_elements=['sku_lower'],
+        set_={
+            'sku': stmt.excluded.sku,
+            'name': stmt.excluded.name,
+            'description': stmt.excluded.description,
+            'price': stmt.excluded.price,
+            'quantity': stmt.excluded.quantity,
+            'is_active': stmt.excluded.is_active,
+            'updated_at': text("NOW()")
+        }
+    )
 
-    db.execute(upsert_sql, unique_rows)
+    db.execute(stmt)
     db.commit()
 
     return inserted_count, updated_count

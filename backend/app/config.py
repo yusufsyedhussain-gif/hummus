@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # CSV Upload
     MAX_UPLOAD_SIZE_MB: int = 100
-    CSV_BATCH_SIZE: int = 10000
+    CSV_BATCH_SIZE: int = 2500
     UPLOAD_DIR: str = "/tmp/product-hub/uploads"
 
     # Webhook
